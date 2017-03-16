@@ -2,11 +2,15 @@ require 'benchmark'
 require 'pry'
 
 def insertion_sort(array)
+  array = array.dup
+
   1.upto(array.length - 1) do |index|
     value_to_insert = array.delete_at(index)
 
     insertion_index = index
-    insertion_index -= 1 while insertion_index > 0 && value_to_insert < array[insertion_index - 1]
+    while insertion_index > 0 && value_to_insert < array[insertion_index - 1]
+      insertion_index -= 1
+    end
 
     array.insert(insertion_index, value_to_insert)
   end
@@ -35,42 +39,59 @@ def radix_sort(array)
   output.compact
 end
 
-sorted   = (1..ARGV[0].to_i).to_a
-shuffled = sorted.shuffle
-reversed = sorted.reverse
+def make_array(size, variant = nil)
+  @array ||= {}
 
-if ARGV.include? 'insertion'
-  puts
-  puts "<<<< Insertion sort >>>>"
-  puts
-
-  Benchmark.bmbm do |x|
-    x.report("insertion sort [sorted array]") { insertion_sort(sorted) }
-    x.report("insertion sort [shuffled array]") { insertion_sort(shuffled) }
-    x.report("insertion sort [reversed order array]") { insertion_sort(reversed) }
+  case variant
+  when :ascending
+    @array[variant] ||= {}
+    @array[variant][size] ||= 1.upto(size).to_a.freeze
+  when :descending
+    @array[variant] ||= {}
+    @array[variant][size] ||= size.downto(1).to_a.freeze
+  when :repeated
+    @array[variant] ||= {}
+    @array[variant][size] ||= 1.upto(size).to_a.map { 42 }.freeze
+  when :shuffled
+    @array[variant] ||= {}
+    @array[variant][size] ||= 1.upto(size).to_a.shuffle.freeze
+  else
+    @array[:random] ||= {}
+    @array[:random][size] ||= 1.upto(size).to_a.map { rand(size) }.freeze
   end
 end
 
-if ARGV.include? 'quicksort'
-  puts
-  puts "<<<< Quick sort >>>>"
-  puts
-
-  Benchmark.bmbm do |x|
-    x.report("quick sort [sorted array]") { quicksort(sorted) }
-    x.report("quick sort [shuffled array]") { quicksort(shuffled) }
-    x.report("quick sort [reversed order array]") { quicksort(reversed) }
-  end
+def make_default_arrays
+  [100, 500, 1000, 2000, 4000, 8000, 16000, 32000, 100000, 500000].map { |size| [size, make_array(size)] }
 end
 
-if ARGV.include? 'radix'
-  puts
-  puts "<<<< Radix sort >>>>"
-  puts
-
-  Benchmark.bmbm do |x|
-    x.report("radix sort [sorted array]") { radix_sort(sorted) }
-    x.report("radix sort [shuffled array]") { radix_sort(shuffled) }
-    x.report("radix sort [reversed order array]") { radix_sort(reversed) }
+def sort_with(algo, array = nil)
+  if !array
+    arrays = make_default_arrays
+  else
+    arrays = [[array.length, array]]
   end
+
+  arrays.each do |(size, array)|
+    t = Thread.new do
+      print "sorting array of #{size} items using #{algo}... ";
+      time = Benchmark.realtime do
+        method(algo).call(array.dup)
+      end
+
+      print "done in #{time} seconds!\n"
+    end
+
+    Thread.new do
+      sleep 30
+      if t.status == "run"
+        print "didn't finish within 30 seconds!\n"
+        t.kill
+      end
+    end
+
+    t.join
+  end
+
+  :done
 end
